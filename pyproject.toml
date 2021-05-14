@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "kf_hs"
+version = "0.1.0"
+description = ""
+authors = ["Bulat Lutfullin <blutfullin@provectus.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+hydrosdk = "^2.4.0"
+kfp = "^1.4.0"
+scikit-learn = "0.24.2"
+
+[tool.poetry.dev-dependencies]
+
+[tool.poetry.scripts]
+demo_image = 'kf_hs.pipeline:build_image'
+demo_compile = 'kf_hs.pipeline:compile'
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

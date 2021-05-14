@@ -1,0 +1,65 @@
+name: Upload model
+inputs:
+- {name: hydrosphere_uri, type: String}
+- {name: model}
+- {name: model_name, type: String, default: kf_regression, optional: true}
+outputs:
+- {name: Output, type: Integer}
+implementation:
+  container:
+    image: kineticcookie/demo-kf
+    command:
+    - sh
+    - -ec
+    - |
+      program_path=$(mktemp)
+      printf "%s" "$0" > "$program_path"
+      python3 -u "$program_path" "$@"
+    - "def upload_model(\n    hydrosphere_uri, \n    model_path,\n    model_name =\
+      \ \"kf_regression\", \n):\n    from hydrosdk import Cluster\n    from hydrosdk.modelversion\
+      \ import LocalModel, ModelContract\n    from hydrosdk.contract import SignatureBuilder\n\
+      \    from hydrosdk.image import DockerImage\n    import tempfile, os, shutil\n\
+      \n    signature = SignatureBuilder('infer') \\\n        .with_input('x1', 'double',\
+      \ \"scalar\") \\\n        .with_input('x2', 'double', \"scalar\") \\\n     \
+      \   .with_output('y', 'int64', \"scalar\") \\\n        .build()\n    contract\
+      \ = ModelContract(predict=signature)\n\n    cluster = Cluster(hydrosphere_uri)\n\
+      \n    model_file = \"model.joblib\"\n    requirements = \"requirements.txt\"\
+      \n\n    with tempfile.TemporaryDirectory() as model_dir:\n        shutil.copy(os.path.join(model_path,\
+      \ model_file), model_dir)\n        shutil.copy(\"/app/kf_hs/steps/upload_model/requirements.txt\"\
+      , model_dir)\n        src_dir = os.path.join(model_dir, \"src\")\n        os.makedirs(src_dir)\n\
+      \        shutil.copy(\"/app/kf_hs/steps/upload_model/func_main.py\", src_dir)\n\
+      \n        print(\"Creating a Model object\")\n        model = LocalModel(\n\
+      \            name = model_name,\n            runtime = DockerImage(\"hydrosphere/serving-runtime-python-3.7\"\
+      , \"2.4.0\", None),\n            path = model_dir,\n            payload = [model_file,\
+      \ \"src/\", requirements],\n            contract = contract,\n            metadata\
+      \ = {\"author\": \"a cool dude\"},\n            install_command = \"pip install\
+      \ -r requirements.txt\",\n            training_data = None,\n            monitoring_configuration\
+      \ = None\n        )\n        result = model.upload(cluster)\n        result.lock_till_released()\n\
+      \        print(result)\n        return result.version\n\ndef _serialize_int(int_value:\
+      \ int) -> str:\n    if isinstance(int_value, str):\n        return int_value\n\
+      \    if not isinstance(int_value, int):\n        raise TypeError('Value \"{}\"\
+      \ has type \"{}\" instead of int.'.format(str(int_value), str(type(int_value))))\n\
+      \    return str(int_value)\n\nimport argparse\n_parser = argparse.ArgumentParser(prog='Upload\
+      \ model', description='')\n_parser.add_argument(\"--hydrosphere-uri\", dest=\"\
+      hydrosphere_uri\", type=str, required=True, default=argparse.SUPPRESS)\n_parser.add_argument(\"\
+      --model\", dest=\"model_path\", type=str, required=True, default=argparse.SUPPRESS)\n\
+      _parser.add_argument(\"--model-name\", dest=\"model_name\", type=str, required=False,\
+      \ default=argparse.SUPPRESS)\n_parser.add_argument(\"----output-paths\", dest=\"\
+      _output_paths\", type=str, nargs=1)\n_parsed_args = vars(_parser.parse_args())\n\
+      _output_files = _parsed_args.pop(\"_output_paths\", [])\n\n_outputs = upload_model(**_parsed_args)\n\
+      \n_outputs = [_outputs]\n\n_output_serializers = [\n    _serialize_int,\n\n\
+      ]\n\nimport os\nfor idx, output_file in enumerate(_output_files):\n    try:\n\
+      \        os.makedirs(os.path.dirname(output_file))\n    except OSError:\n  \
+      \      pass\n    with open(output_file, 'w') as f:\n        f.write(_output_serializers[idx](_outputs[idx]))\n"
+    args:
+    - --hydrosphere-uri
+    - {inputValue: hydrosphere_uri}
+    - --model
+    - {inputPath: model}
+    - if:
+        cond: {isPresent: model_name}
+        then:
+        - --model-name
+        - {inputValue: model_name}
+    - '----output-paths'
+    - {outputPath: Output}

@@ -1,0 +1,69 @@
+name: Update application
+inputs:
+- {name: model_name, type: String}
+- {name: model_version, type: Integer}
+- {name: hydrosphere_uri, type: String}
+- {name: application_name, type: String, default: kf_lr_app, optional: true}
+implementation:
+  container:
+    image: kineticcookie/demo-kf
+    command:
+    - sh
+    - -ec
+    - |
+      program_path=$(mktemp)
+      printf "%s" "$0" > "$program_path"
+      python3 -u "$program_path" "$@"
+    - |
+      def update_application(
+          model_name,
+          model_version,
+          hydrosphere_uri,
+          application_name = "kf_lr_app"
+      ):
+          import time
+          from hydrosdk import Cluster
+          from hydrosdk.modelversion import ModelVersion
+          from hydrosdk.application import Application, ApplicationBuilder, ExecutionStageBuilder
+
+          cluster = Cluster(hydrosphere_uri)
+          mv = ModelVersion.find(cluster, model_name, model_version)
+
+          try:
+              Application.delete(cluster, application_name)
+              time.sleep(5)
+          except Exception as e:
+              print(f"Got error while trying to delete an application {application_name}")
+              print(e)
+
+          print("Creating an Application object")
+          app_builder = ApplicationBuilder(cluster, application_name)
+          stage = ExecutionStageBuilder().with_model_variant(mv, 100).build()
+          app_builder = app_builder.with_stage(stage)
+          print(f"Uploading model to the cluster {hydrosphere_uri}")
+          app = app_builder.build()
+          app = app.lock_while_starting()
+          print(app)
+          return app
+
+      import argparse
+      _parser = argparse.ArgumentParser(prog='Update application', description='')
+      _parser.add_argument("--model-name", dest="model_name", type=str, required=True, default=argparse.SUPPRESS)
+      _parser.add_argument("--model-version", dest="model_version", type=int, required=True, default=argparse.SUPPRESS)
+      _parser.add_argument("--hydrosphere-uri", dest="hydrosphere_uri", type=str, required=True, default=argparse.SUPPRESS)
+      _parser.add_argument("--application-name", dest="application_name", type=str, required=False, default=argparse.SUPPRESS)
+      _parsed_args = vars(_parser.parse_args())
+
+      _outputs = update_application(**_parsed_args)
+    args:
+    - --model-name
+    - {inputValue: model_name}
+    - --model-version
+    - {inputValue: model_version}
+    - --hydrosphere-uri
+    - {inputValue: hydrosphere_uri}
+    - if:
+        cond: {isPresent: application_name}
+        then:
+        - --application-name
+        - {inputValue: application_name}

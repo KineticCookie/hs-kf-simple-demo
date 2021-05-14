@@ -1,0 +1,55 @@
+name: Train
+inputs:
+- {name: n_samples, type: Integer, default: '300', optional: true}
+outputs:
+- {name: output}
+implementation:
+  container:
+    image: kineticcookie/demo-kf
+    command:
+    - sh
+    - -ec
+    - |
+      program_path=$(mktemp)
+      printf "%s" "$0" > "$program_path"
+      python3 -u "$program_path" "$@"
+    - |
+      def _make_parent_dirs_and_return_path(file_path: str):
+          import os
+          os.makedirs(os.path.dirname(file_path), exist_ok=True)
+          return file_path
+
+      def train(
+          output_path,
+          n_samples = 300,
+      ):
+          import joblib
+          import os
+          from sklearn.datasets import make_blobs
+          from sklearn.linear_model import LogisticRegression
+          os.makedirs(output_path)
+          # initialize data
+          X, y = make_blobs(n_samples=n_samples, n_features=2, centers=[[-5, 1],[5, -1]])
+          # create a model
+          model = LogisticRegression()
+          model.fit(X, y)
+
+          model_filename = "model.joblib"
+          full_path = os.path.join(output_path, model_filename)
+          joblib.dump(model, full_path)
+
+      import argparse
+      _parser = argparse.ArgumentParser(prog='Train', description='')
+      _parser.add_argument("--n-samples", dest="n_samples", type=int, required=False, default=argparse.SUPPRESS)
+      _parser.add_argument("--output", dest="output_path", type=_make_parent_dirs_and_return_path, required=True, default=argparse.SUPPRESS)
+      _parsed_args = vars(_parser.parse_args())
+
+      _outputs = train(**_parsed_args)
+    args:
+    - if:
+        cond: {isPresent: n_samples}
+        then:
+        - --n-samples
+        - {inputValue: n_samples}
+    - --output
+    - {outputPath: output}
